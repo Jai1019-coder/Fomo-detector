@@ -1,48 +1,106 @@
-from src.train import train_model
-from src.simulate import run_simulation
-import os
+import time
+# pyrefly: ignore [missing-import]
+import joblib
+import json
+import random
+import pandas as pd
 
-MODEL_PATH = "models/fomo_model.pkl"
+from src.config import MODEL_PATH, LOG_PATH
+from src.utils import generate_sample, get_label_name
+
+from collections.abc import AsyncIterable, Iterable
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+import uvicorn
+
+app = FastAPI()
+
+# class Data(BaseModel):
+#     alpha:float
+#     beta:float
+#     theta:float
+#     gamma:float
+#     attention:float
+#     scroll_speed:float
+#     prediction:int
 
 
-def is_model_trained():
-    return os.path.exists(MODEL_PATH)
+# Load trained model
+model = joblib.load(MODEL_PATH)
 
+def generate_stream(duration=300):
+    print("🚀 Running simulation for 5 minutes...\n")
 
-def main():
-    while True:
-        print("\n==== FOMO BCI SYSTEM ====")
-        print("1. Train Model")
-        print("2. Run Simulation")
-        print("3. Exit")
+    logs = []
+    start = time.time()
 
-        choice = input("Enter choice: ").strip()
+    while time.time() - start < duration:
 
-        if choice == "1":
-            print("\n🧠 Training model...\n")
-            train_model()
+        # Simulate real state
+        real_label = random.choice([0, 1, 2, 3])
 
-        elif choice == "2":
-            if not is_model_trained():
-                print("\n❌ Model not found! Train model first.\n")
-                continue
+        # Generate sample
+        sample = generate_sample(real_label)
 
-            try:
-                duration = int(input("Enter simulation time (seconds, default 300): ") or 300)
-            except ValueError:
-                print("⚠ Invalid input, using default 300 seconds.")
-                duration = 300
+        # ✅ FIX: column names must EXACTLY match training
+        sample_df = pd.DataFrame([sample], columns=[
+            "alpha",
+            "beta",
+            "theta",
+            "gamma",
+            "attention",
+            "scroll_speed"   # 🔥 FIXED NAME
+        ])
 
-            print("\n🚀 Starting simulation...\n")
-            run_simulation(duration=duration)
+        # Predict
+        pred = model.predict(sample_df)[0]
+        real_name = get_label_name(real_label)
+        pred_name = get_label_name(pred)
 
-        elif choice == "3":
-            print("\n👋 Exiting system. Goodbye!")
-            break
+        data = {
+            "alpha": sample[0],
+            "beta": sample[1],
+            "theta": sample[2],
+            "gamma": sample[3],
+            "attention": sample[4],
+            "scroll_speed": sample[5],
+            "prediction": int(pred)
+        }
+        yield json.dumps(data) + "\n"
 
-        else:
-            print("\n❌ Invalid choice. Try again.\n")
+        print(f"Real: {real_name} | Predicted: {pred_name}")
 
+        if pred == 1:
+            print("⚠ ALERT: FOMO DETECTED!\n")
+
+        logs.append(sample + [real_label, pred])
+
+        time.sleep(1)
+
+    # Save logs
+    # df = pd.DataFrame(logs, columns=[
+    #     "alpha",
+    #     "beta",
+    #     "theta",
+    #     "gamma",
+    #     "attention",
+    #     "scroll_speed",
+    #     "real_label",
+    #     "predicted"
+    # ])
+
+    # df.to_csv(LOG_PATH, index=False)
+
+    # print("\n✅ Simulation completed!")
+    # print("📁 Log saved at:", LOG_PATH)
+
+@app.get("/data_stream")
+def data_stream():
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/plain"
+    )
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run("main:app", host="0.0.0.0", port=9000, reload=True)

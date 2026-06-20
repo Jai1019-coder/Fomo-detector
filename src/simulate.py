@@ -36,7 +36,7 @@ def run_simulation(duration=300):
 
         # Predict
         pred = model.predict(sample_df)[0]
-
+        print(sample_df)
         real_name = get_label_name(real_label)
         pred_name = get_label_name(pred)
 

@@ -4,6 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
 import joblib
 from config import DATA_PATH, MODEL_PATH
+import os
 
 
 def train_model():
@@ -23,6 +24,10 @@ def train_model():
 
     print("\n📊 Model Evaluation:\n")
     print(classification_report(y_test, y_pred))
+
+    dir = os.path.dirname(MODEL_PATH)
+    if not os.path.exists(dir):
+        os.makedirs(dir)
 
     joblib.dump(model, MODEL_PATH)
     print("✅ Model saved at:", MODEL_PATH)
